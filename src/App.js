@@ -1,73 +1,109 @@
-import React, { Component } from "react";
+import React, { useState, useEffect } from "react";
 import ReactHighcharts from "react-highcharts/ReactHighstock.src";
-import priceData from "./assets/btcdata.json";
-import moment from "moment";
 
-export default class App extends Component {
-  render() {
-    const options = { style: "currency", currency: "USD" };
-    const numberFormat = new Intl.NumberFormat("en-US", options);
-    const configPrice = {
-      yAxis: [
+
+const App = () => {
+    const [data, setData] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isError, setIsError] = useState(false);
+
+    function getStartThreshold(startTimestamp) {
+      let startDate = new Date(startTimestamp);
+      console.log(startDate.toUTCString());
+      const offset = startDate.getTimezoneOffset();
+        let start_h = startDate.getHours();
+        let start_m = start_h*60 + startDate.getMinutes();
+        let start_s = start_m*60 + startDate.getSeconds(); 
+        if (start_s + Math.abs(offset*60) > 24*3600) { 
+          startDate.setDate(startDate.getDate() + 1);
+        }
+        startDate.setHours(0, 0, 0);
+        return (Date.parse(startDate) - offset*60000)
+    }
+    const fetchData = () => {
+    fetch('https://x.api.ecologi.com/trees')
+      .then((response) => response.json())
+      .then((data) => {
+        // data.data.splice(100)
+        data.data.sort(function(a, b){return a[1] - b[1]});
+        let startThresold = getStartThreshold(data.data[0][1]*1000);
+
+        let processedData =[]; 
+        let tem = data.data[0][0];
+        let timestamp = startThresold;
+        // console.log(data.data);
+        for(let i=1; i<data.data.length; i++)
         {
-          offset: 20,
-
-          labels: {
-            formatter: function () {
-              return numberFormat.format(this.value);
-            },
-            x: -15,
-            style: {
-              color: "#000",
-              position: "absolute"
-            },
-            align: "left"
+          if(data.data[i][1]*1000 < timestamp){
+            tem += data.data[i][0]*1000;
           }
+          else{
+            processedData.push([timestamp - 24*3600*1000, tem]);
+            tem = data.data[i][0]*1000;
+            timestamp += 24*3600*1000;
+            }
         }
-      ],
+        
+        setData(processedData);
+        console.log(processedData)
+        setIsLoading(false);  
+      })
+      .catch((error) => {
+        setIsLoading(false);
+        setIsError(true);
+        console.log(error);
+      });
+      
+  };
+  useEffect(() => {
+    fetchData();
+  }, []);
+  if (isLoading) {
+    return <div>Loading...</div>;
+  }
+
+    const configPrice = {
+    
       tooltip: {
-        shared: true,
-        formatter: function () {
-          return (
-            numberFormat.format(this.y, 0) +
-            "</b><br/>" +
-            moment(this.x).format("MMMM Do YYYY, h:mm")
-          );
-        }
+        shared: true
       },
       plotOptions: {
         series: {
           showInNavigator: true,
-          gapSize: 6
-        }
-      },
-      rangeSelector: {
-        selected: 1
+          gapSize: 6,
+          // dashStyle: 'ShortDot'
+          showInLegend: true,
+          visible: true,
+          // color: 'red'
+        },
+        area: {
+          fillColor: {
+             linearGradient: { x1: 0, y1: 0, x2: 0, y2: 1}
+          },
+          marker: {
+             radius: 2
+          },
+          lineWidth: 1,
+          states: {
+             hover: {
+                lineWidth: 1
+             }
+          },
+          threshold: null
+       }
       },
       title: {
-        text: `Bitcoin stock price`
+        text: `Trees Per Day(GMT)`
       },
       chart: {
-        height: 600
-      },
-
-      credits: {
-        enabled: false
-      },
-
-      legend: {
-        enabled: true
+        height: 700,
+        zoomType: 'x'
       },
       xAxis: {
         type: "date"
       },
       rangeSelector: {
         buttons: [
-          {
-            type: "day",
-            count: 1,
-            text: "1d"
-          },
           {
             type: "day",
             count: 7,
@@ -88,17 +124,14 @@ export default class App extends Component {
             text: "All"
           }
         ],
-        selected: 4
+        selected: 3
       },
+      
       series: [
         {
-          name: "Price",
-          type: "spline",
-
-          data: priceData,
-          tooltip: {
-            valueDecimals: 2
-          }
+          name: "Trees",
+          type: "line",
+          data: data,
         }
       ]
     };
@@ -107,5 +140,5 @@ export default class App extends Component {
         <ReactHighcharts config={configPrice}></ReactHighcharts>
       </div>
     );
-  }
 }
+export default App;
